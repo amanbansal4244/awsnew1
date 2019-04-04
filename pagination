@@ -1,0 +1,188 @@
+package gloablSecondaryIndex;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+
+import org.json.JSONObject;
+
+import com.amazonaws.services.dynamodbv2.AmazonDynamoDB;
+import com.amazonaws.services.dynamodbv2.AmazonDynamoDBClientBuilder;
+import com.amazonaws.services.dynamodbv2.document.DynamoDB;
+import com.amazonaws.services.dynamodbv2.document.Index;
+import com.amazonaws.services.dynamodbv2.document.Item;
+import com.amazonaws.services.dynamodbv2.document.ItemCollection;
+import com.amazonaws.services.dynamodbv2.document.QueryOutcome;
+import com.amazonaws.services.dynamodbv2.document.Table;
+import com.amazonaws.services.dynamodbv2.document.spec.QuerySpec;
+import com.amazonaws.services.dynamodbv2.document.utils.NameMap;
+import com.amazonaws.services.dynamodbv2.document.utils.ValueMap;
+import com.amazonaws.services.dynamodbv2.model.AttributeValue;
+import com.amazonaws.services.dynamodbv2.model.AttributeValueUpdate;
+import com.amazonaws.services.dynamodbv2.model.ComparisonOperator;
+import com.amazonaws.services.dynamodbv2.model.Condition;
+import com.amazonaws.services.dynamodbv2.model.QueryRequest;
+import com.amazonaws.services.dynamodbv2.model.QueryResult;
+import com.amazonaws.services.dynamodbv2.model.ResourceNotFoundException;
+import com.amazonaws.services.dynamodbv2.model.UpdateItemRequest;
+import com.amazonaws.services.dynamodbv2.model.UpdateItemResult;
+import com.fasterxml.jackson.databind.util.JSONPObject;
+
+/*
+ Global secondary index in pagination : FILE_UID +  BATCH_ID
+ */
+public class _5PaginationGlobalSecondaryIndex_using_index2 {
+
+	static AmazonDynamoDB client = AmazonDynamoDBClientBuilder.standard().build();
+	static DynamoDB dynamoDB = new DynamoDB(client);
+
+	public static void main(String[] args) throws Exception {
+		String tableName = "EMPLOYEE_DATA_AMAN";
+		String fileUID = "1";
+		String batchID = String.valueOf(3);
+
+		String niNumber = "";
+		String staffNumber = "";
+		String employerCode = "";
+		String schemeCode = "";
+		String memberUID = "";
+		List<Integer> batchIdList = new ArrayList<>();
+		batchIdList.add(1);
+		batchIdList.add(2);
+		batchIdList.add(3);
+		batchIdList.add(4);
+		try {
+			for (int i = 0; i < batchIdList.size(); i++) {
+				System.out.println("batch:" + batchIdList.get(i));
+				Condition hashKeyCondition1 = new Condition().withComparisonOperator(ComparisonOperator.EQ)
+						.withAttributeValueList(new AttributeValue().withS(fileUID));
+
+				Condition hashKeyCondition2 = new Condition().withComparisonOperator(ComparisonOperator.EQ)
+						.withAttributeValueList(new AttributeValue().withS(String.valueOf(batchIdList.get(i))));
+
+				Map<String, Condition> keyConditions = new HashMap<String, Condition>();
+				keyConditions.put("FILE_UID", hashKeyCondition1);
+				keyConditions.put("BATCH_ID", hashKeyCondition2);
+
+				Map<String, AttributeValue> lastEvaluatedKey = null;
+				do {
+					QueryRequest queryRequest = new QueryRequest().withTableName(tableName)
+							.withKeyConditions(keyConditions).withLimit(1).withExclusiveStartKey(lastEvaluatedKey);
+
+					queryRequest.setIndexName("FILE_UID-BATCH_ID-index");
+
+					QueryResult result = client.query(queryRequest);
+					System.out.println(result);
+					for (Map<String, AttributeValue> item : result.getItems()) {
+						niNumber = item.get("NI_NUMBER").getS();
+						staffNumber = item.get("STAFF_NUMBER").getS();
+						employerCode = item.get("EMPLOYER_CODE").getS();
+						schemeCode = item.get("SCHEME_CODE").getS();
+						memberUID = item.get("MEMBER_UID").getS();
+						System.out.println("niNumber: " + niNumber);
+						System.out.println("schemeCode: " + schemeCode);
+						validateData(schemeCode, memberUID, fileUID, niNumber, staffNumber);
+					}
+					lastEvaluatedKey = result.getLastEvaluatedKey();
+				} while (lastEvaluatedKey != null);
+
+			}
+		} catch (ResourceNotFoundException e) {
+			System.out.println("ResourceNotFoundException");
+			throw e;
+
+		} catch (Exception e) {
+			System.out.println("exception");
+			throw e;
+
+		}
+
+	}
+
+	public static void validateData(String schemeCode, String memberUID, String fileUID, String niNumber,
+			String staffNumber) {
+		AmazonDynamoDB client = AmazonDynamoDBClientBuilder.standard().build();
+		DynamoDB dynamoDB = new DynamoDB(client);
+
+		Table table = dynamoDB.getTable("MASTER_DATA_AMAN");
+		Index schmeCodeNiNumberIndex = table.getIndex("SCHEME_CODE-NI_NUMBER-index");
+		Index schmeCodeStaffNumberIndex = table.getIndex("SCHEME_CODE-STAFF_NUMBER-index");
+
+		/**** Query with Secondary index and other field ****/
+		QuerySpec niNumberspec = new QuerySpec()
+				.withKeyConditionExpression("#sCode = :v_scheme_code and NI_NUMBER = :v_ni_number")
+				.withNameMap(new NameMap().with("#sCode", "SCHEME_CODE")).withValueMap(
+						new ValueMap().withString(":v_scheme_code", schemeCode).withString(":v_ni_number", niNumber));
+
+		QuerySpec staffNumberspec = new QuerySpec()
+				.withKeyConditionExpression("#sCode = :v_scheme_code and STAFF_NUMBER = :v_staff_number")
+				.withNameMap(new NameMap().with("#sCode", "SCHEME_CODE")).withValueMap(new ValueMap()
+						.withString(":v_scheme_code", schemeCode).withString(":v_staff_number", staffNumber));
+
+		if (schmeCodeNiNumberIndex != null && schmeCodeNiNumberIndex.query(niNumberspec).firstPage().size() != 0) {
+			updateEmployeeDataTable(memberUID, fileUID, "VALIDATED", "VALIDATED");
+		} else {
+			if (schmeCodeStaffNumberIndex != null
+					&& schmeCodeStaffNumberIndex.query(staffNumberspec).firstPage().size() != 0) {
+				updateEmployeeDataTable(memberUID, fileUID, "VALIDATED", "VALIDATED");
+			} else {
+				updateEmployeeDataTable(memberUID, fileUID, "POTENIAL NEW JOINER", "UNMATCHED");
+			}
+		}
+
+	}
+
+	public ItemCollection<QueryOutcome> getDataBasedOnCompositeSecondaryIndex(String tableName, String indexName, String secondaryIndexPartitionKey,
+			String secondaryIndexSortKey, String secondaryIndexPartitionKeyValue, String secondaryIndexSortKeyValue) {
+		AmazonDynamoDB client = AmazonDynamoDBClientBuilder.standard().build();
+		DynamoDB dynamoDB = new DynamoDB(client);
+
+		Table table = dynamoDB.getTable(tableName);
+		Index index = table.getIndex(indexName);
+		QuerySpec querySpec = new QuerySpec()
+				.withKeyConditionExpression("#s = :v_secondaryIndexPartitionKey and secondaryIndexSortKey = :v_secondaryIndexSortKey")
+				.withNameMap(new NameMap().with("#s", secondaryIndexPartitionKey)).withValueMap(
+						new ValueMap().withString(":v_secondaryIndexPartitionKey", secondaryIndexPartitionKeyValue).withString(":v_secondaryIndexSortKey", secondaryIndexSortKeyValue));
+
+		ItemCollection<QueryOutcome> queryOutcome = index.query(querySpec);
+		
+		return queryOutcome;
+		
+	}
+
+	/**
+	 * 
+	 * @param Id
+	 *            PK of the table
+	 * @param updatedComment
+	 *            value to be updated
+	 */
+	public static void updateEmployeeDataTable(String memberUID, String fileUID, String updatedComment,
+			String updateMemberStatusCode) {
+
+		AmazonDynamoDB client = AmazonDynamoDBClientBuilder.standard().build();
+		String tableName = "EMPLOYEE_DATA_AMAN";
+		/***
+		 * Key of this map is the column name of the DB Id -> PK of the table
+		 * specification_name -> Column name of DB RECORD_STATUS_ID -> Column name of DB
+		 ***/
+		Map<String, AttributeValue> attributeValues = new HashMap<>();
+		attributeValues.put("MEMBER_UID", new AttributeValue().withS(memberUID));
+		attributeValues.put("COMMENT", new AttributeValue().withS(updatedComment));
+		attributeValues.put("MEMBER_STATUS_CODE", new AttributeValue().withS(updateMemberStatusCode));
+
+		UpdateItemRequest updateItemRequest = new UpdateItemRequest().withTableName(tableName)
+				.addKeyEntry("MEMBER_UID", new AttributeValue().withS(memberUID))
+				.addKeyEntry("FILE_UID", new AttributeValue().withS(fileUID))
+				.addAttributeUpdatesEntry("COMMENT",
+						new AttributeValueUpdate().withValue(new AttributeValue().withS(updatedComment)))
+				.addAttributeUpdatesEntry("MEMBER_STATUS_CODE",
+						new AttributeValueUpdate().withValue(new AttributeValue().withS(updateMemberStatusCode)));
+
+		UpdateItemResult updateItemResult = client.updateItem(updateItemRequest);
+		System.out.println("Printing item after update to new attribute...");
+		System.out.println(updateItemResult);
+	}
+}
