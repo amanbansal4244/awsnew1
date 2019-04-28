@@ -1,0 +1,97 @@
+package PrimaryKey;
+
+import java.util.HashMap;
+import java.util.Map;
+
+import com.amazonaws.AmazonServiceException;
+import com.amazonaws.services.dynamodbv2.AmazonDynamoDB;
+import com.amazonaws.services.dynamodbv2.AmazonDynamoDBClientBuilder;
+import com.amazonaws.services.dynamodbv2.document.DynamoDB;
+import com.amazonaws.services.dynamodbv2.document.Table;
+import com.amazonaws.services.dynamodbv2.model.AttributeAction;
+import com.amazonaws.services.dynamodbv2.model.AttributeValue;
+import com.amazonaws.services.dynamodbv2.model.AttributeValueUpdate;
+import com.amazonaws.services.dynamodbv2.model.ComparisonOperator;
+import com.amazonaws.services.dynamodbv2.model.ConditionalCheckFailedException;
+import com.amazonaws.services.dynamodbv2.model.ExpectedAttributeValue;
+import com.amazonaws.services.dynamodbv2.model.ReturnValue;
+import com.amazonaws.services.dynamodbv2.model.UpdateItemRequest;
+import com.amazonaws.services.dynamodbv2.model.UpdateItemResult;
+
+public class UpdateCondionally {
+	static AmazonDynamoDB client = AmazonDynamoDBClientBuilder.standard().build();
+	static DynamoDB dynamoDB = new DynamoDB(client);
+	static String tableName = "EMPLOYEE_DATA_AMAN";
+	static Table table = dynamoDB.getTable(tableName);
+
+	public static void main(String[] args) throws Exception {
+		//updateColumnValueBasedOnPK();
+		updateConditionallyWithAttributeEntries();
+	}
+
+	public static void updateConditionallyWithAttributeEntries() {
+		 long start = System.currentTimeMillis();
+		HashMap<String, AttributeValue> key = new HashMap<String, AttributeValue>();
+        key.put("FILE_UID", new AttributeValue().withS("1"));// partion key
+        key.put("MEMBER_UID", new AttributeValue().withS("2"));// sort key
+        String updatedNewValue ="VALIDATED1";
+        String prefix = "qqqW";
+
+		UpdateItemRequest updateItemRequest = new UpdateItemRequest().withTableName(tableName).withKey(key)
+				.addAttributeUpdatesEntry("MEMBER_STATUS_CODE",
+						new AttributeValueUpdate().withValue(new AttributeValue().withS(updatedNewValue))
+								.withAction(AttributeAction.PUT))
+				.addAttributeUpdatesEntry("COMMENT",
+						new AttributeValueUpdate().withValue(new AttributeValue().withS(updatedNewValue))
+								.withAction(AttributeAction.PUT))
+				.addExpectedEntry("MEMBER_STATUS_CODE",
+						new ExpectedAttributeValue().withValue(new AttributeValue().withS(prefix))
+								.withComparisonOperator(ComparisonOperator.NE));
+
+		UpdateItemResult updateItemResult = client.updateItem(updateItemRequest);
+		System.out.println("Printing item after conditional update to new attribute...");
+		System.out.println(updateItemResult);
+		long end1 = System.currentTimeMillis();
+		System.out.println("Update takes " + (end1 - start) + "ms");
+
+	}
+	
+	public static void updateColumnValueBasedOnPK() {
+		 try {
+			 long start = System.currentTimeMillis();
+	            HashMap<String, AttributeValue> key = new HashMap<String, AttributeValue>();
+	            key.put("FILE_UID", new AttributeValue().withS("1"));// partion key
+	            key.put("MEMBER_UID", new AttributeValue().withS("2"));// sort key
+
+	            Map<String, AttributeValue> expressionAttributeValues = new HashMap<String, AttributeValue>();
+	            expressionAttributeValues.put(":newcc", new AttributeValue().withS("VALIDATED")); 
+	            expressionAttributeValues.put(":msc", new AttributeValue().withS("VALIDATED")); 
+	            expressionAttributeValues.put(":newmsc", new AttributeValue().withS("yyy")); 
+	            
+	            ReturnValue returnValues = ReturnValue.ALL_NEW;
+
+	            UpdateItemRequest updateItemRequest = new UpdateItemRequest()
+	                .withTableName(tableName)
+	                .withKey(key)
+	                .withUpdateExpression("set MEMBER_STATUS_CODE = :newmsc")
+	                .withConditionExpression("MEMBER_STATUS_CODE = :msc")
+	                .withExpressionAttributeValues(expressionAttributeValues)
+	                .withReturnValues(returnValues);
+
+	            UpdateItemResult result = client.updateItem(updateItemRequest);
+	            
+	            // Check the response.
+	            System.out.println("Printing item after conditional update to new attribute...");
+	            System.out.println(result.getAttributes()); 
+	            long end1 = System.currentTimeMillis();
+	    		System.out.println("Update takes " + (end1 - start) + "ms");
+	        } catch (ConditionalCheckFailedException cse) {
+	            // Reload object and retry code.
+	            System.err.println("Conditional check failed in " + tableName +" error" + cse);
+	        } catch (AmazonServiceException ase) {
+	            System.err.println("Error updating item in " + tableName +" error" + ase);
+	        }        
+
+	}
+
+}
