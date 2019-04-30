@@ -1,0 +1,133 @@
+package com.invoke.lambda;
+
+import org.json.simple.JSONObject;
+import org.json.simple.parser.JSONParser;
+import org.json.simple.parser.ParseException;
+
+import com.amazonaws.services.dynamodbv2.AmazonDynamoDB;
+import com.amazonaws.services.dynamodbv2.AmazonDynamoDBClientBuilder;
+import com.amazonaws.services.dynamodbv2.model.AttributeValue;
+import com.amazonaws.services.dynamodbv2.model.AttributeValueUpdate;
+import com.amazonaws.services.dynamodbv2.model.UpdateItemRequest;
+import com.amazonaws.services.dynamodbv2.model.UpdateItemResult;
+import com.amazonaws.services.lambda.runtime.Context;
+import com.amazonaws.services.lambda.runtime.RequestHandler;
+import com.google.gson.Gson;
+
+public class LambdaToBeInvoked2 implements RequestHandler<JSONObject, String> {
+
+	static AmazonDynamoDB AMAZON_DYNAMO_DB_CLIENT;
+	static {
+		AMAZON_DYNAMO_DB_CLIENT = AmazonDynamoDBClientBuilder.standard().withRegion("us-east-1").build();
+	}
+
+	@Override
+	public String handleRequest(JSONObject request, Context arg1) {
+		System.out.println("started");
+		System.out.println("\nLambda function returned:" + request.get("tableName"));
+
+		// ByteBuffer response_payload = request.getPayload();
+		// System.out.println(new String(response_payload.array()));
+		long start = System.currentTimeMillis();
+		long end = System.currentTimeMillis();
+		System.out.println("Creating db time taken " + (end - start) + "ms");
+		String tableName = "EMPLOYEE_DATA_AMAN";
+		long start1 = System.currentTimeMillis();
+
+		UpdateItemRequest updateItemRequest = new UpdateItemRequest().withTableName(tableName)
+				.addKeyEntry("MEMBER_UID", new AttributeValue().withS("2"))
+				.addKeyEntry("FILE_UID", new AttributeValue().withS("1"))
+				.addAttributeUpdatesEntry("COMMENT",
+						new AttributeValueUpdate().withValue(new AttributeValue().withS("tttt")))
+				.addAttributeUpdatesEntry("MEMBER_STATUS_CODE",
+						new AttributeValueUpdate().withValue(new AttributeValue().withS("rrrr")));
+
+		UpdateItemResult updateItemResult = AMAZON_DYNAMO_DB_CLIENT.updateItem(updateItemRequest);
+		long end1 = System.currentTimeMillis();
+		System.out.println("Update takes " + (end1 - start1) + "ms");
+
+		return "aaaaaaaaaaa";
+
+	}
+
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+package com.invoke.lambda;
+
+import java.io.IOException;
+
+import org.json.simple.JSONObject;
+
+import com.amazonaws.protocol.json.SdkJsonGenerator.JsonGenerationException;
+import com.amazonaws.regions.Regions;
+import com.amazonaws.services.dynamodbv2.AmazonDynamoDB;
+import com.amazonaws.services.dynamodbv2.AmazonDynamoDBClientBuilder;
+import com.amazonaws.services.lambda.AWSLambda;
+import com.amazonaws.services.lambda.AWSLambdaClientBuilder;
+import com.amazonaws.services.lambda.model.InvocationType;
+import com.amazonaws.services.lambda.model.InvokeRequest;
+import com.amazonaws.services.lambda.model.InvokeResult;
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+
+public class InvokeLambda {
+	static AWSLambda awsLambda = AWSLambdaClientBuilder.standard().withRegion(Regions.US_EAST_1).build();
+	static AmazonDynamoDB client;
+	static {
+		client = AmazonDynamoDBClientBuilder.standard().withRegion("us-east-1").build();
+	}
+
+	public static void main(String[] args) throws Exception {
+		
+		  PotentialNewJoinerData potentialNewJoinerData = new PotentialNewJoinerData();
+		  potentialNewJoinerData.setFileUID("1");
+		  potentialNewJoinerData.setMemberUID("2");
+		  potentialNewJoinerData.setNewComment("newComment");
+		  potentialNewJoinerData.setNewMemberStatusCode("newMemberStatusCode");
+		 potentialNewJoinerData.setTableName("EMPLOYEE_DATA_AMAN");
+
+		 String payload = objectToJSON( potentialNewJoinerData );
+
+		System.out.println("amazon db client:" + client);
+		String input = "{\"who\":\"aws\"}";
+		InvokeRequest invokeRequest = new InvokeRequest();
+		invokeRequest.setFunctionName("UpdateLambda");
+		invokeRequest.setPayload(payload);
+		invokeRequest.setInvocationType(InvocationType.Event);
+		InvokeResult invoke = awsLambda.invoke(invokeRequest);
+
+	}
+
+	private static String objectToJSON(Object obj) {
+		String json = "";
+		try {
+			ObjectMapper objectMapper = new ObjectMapper();
+			//objectMapper.configure(JsonParser.Feature.ALLOW_UNQUOTED_FIELD_NAMES, true);
+			json = objectMapper.writeValueAsString(obj);
+
+		} catch (JsonGenerationException | IOException e) {
+			// logger.severe("Object to JSON failed: " + e.getLocalizedMessage());
+		}
+		return json;
+	}
+
+}
