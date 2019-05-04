@@ -1,0 +1,304 @@
+public static void updateColumnValueBasedOnPK(String Id, String updatedNewValue) {
+		long start = System.currentTimeMillis();
+		AmazonDynamoDB client = AmazonDynamoDBClientBuilder.standard().withRegion("us-east-1").build();
+		long end = System.currentTimeMillis();
+		System.out.println("Creating db time taken " + (end - start) + "ms");
+		String tableName = "EMPLOYEE_DATA_AMAN";
+		long start1 = System.currentTimeMillis();
+
+		UpdateItemRequest updateItemRequest = new UpdateItemRequest().withTableName(tableName)
+				.addKeyEntry("MEMBER_UID", new AttributeValue().withS("2"))
+				.addKeyEntry("FILE_UID", new AttributeValue().withS("1"))
+				.addAttributeUpdatesEntry("COMMENT",
+						new AttributeValueUpdate().withValue(new AttributeValue().withS("ttttee")))
+				.addAttributeUpdatesEntry("MEMBER_STATUS_CODE",
+						new AttributeValueUpdate().withValue(new AttributeValue().withS("rrreer")))
+				.withReturnValues(ReturnValue.UPDATED_NEW);
+			;
+
+		UpdateItemResult updateItemResult = client.updateItem(updateItemRequest);
+		System.out.println("updateItemResult:" + updateItemResult.getAttributes());
+		
+		Map<String, AttributeValue> key = new HashMap<>();
+		key.put("MEMBER_STATUS_CODE", new AttributeValue().withS("ttttee"));
+		UpdateItemResult updateItemResultMock = new UpdateItemResult();
+		updateItemResultMock.setAttributes(key);
+		System.out.println("updateItemResult:" + updateItemResult.getAttributes().get("MEMBER_STATUS_CODE").getS());
+		
+		long end1 = System.currentTimeMillis();
+		System.out.println("Update takes " + (end1 - start1) + "ms");
+	}
+  
+  
+  
+  
+  
+  
+  package com.invoke.lambda;
+
+import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
+
+import org.json.simple.JSONObject;
+
+import com.amazonaws.protocol.json.SdkJsonGenerator.JsonGenerationException;
+import com.amazonaws.regions.Regions;
+import com.amazonaws.services.dynamodbv2.AmazonDynamoDB;
+import com.amazonaws.services.dynamodbv2.AmazonDynamoDBClientBuilder;
+import com.amazonaws.services.lambda.AWSLambda;
+import com.amazonaws.services.lambda.AWSLambdaAsync;
+import com.amazonaws.services.lambda.AWSLambdaAsyncClientBuilder;
+import com.amazonaws.services.lambda.AWSLambdaClientBuilder;
+import com.amazonaws.services.lambda.model.InvocationType;
+import com.amazonaws.services.lambda.model.InvokeRequest;
+import com.amazonaws.services.lambda.model.InvokeResult;
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+
+public class InvokeLambda_Asynchronously {
+	static AWSLambdaAsync AWS_LAMBDA_ASYNC = AWSLambdaAsyncClientBuilder.defaultClient();
+
+	public static void main(String[] args) throws Exception {
+		
+		  PotentialNewJoinerData potentialNewJoinerData = new PotentialNewJoinerData();
+		  potentialNewJoinerData.setFileUID("1");
+		  potentialNewJoinerData.setMemberUID("2");
+		  potentialNewJoinerData.setNewComment("newComment");
+		  potentialNewJoinerData.setNewMemberStatusCode("newMemberStatusCode");
+		 potentialNewJoinerData.setTableName("EMPLOYEE_DATA_AMAN");
+
+		// String payload = objectToJSON( potentialNewJoinerData );
+
+		 JSONObject jsonObject = new JSONObject();
+		 jsonObject.put("tableName", "EMPLOYEE_DATA_AMAN");
+		 ObjectMapper objectMapper = new ObjectMapper();
+		 String payload = objectMapper.writeValueAsString(jsonObject);
+		 
+		String input = "{\"who\":\"aws\"}";
+		InvokeRequest invokeRequest = new InvokeRequest();
+		invokeRequest.setFunctionName("LambdaToBeInvoked");
+		invokeRequest.setPayload(payload);
+		invokeRequest.setInvocationType(InvocationType.Event);
+		Future<InvokeResult> future_res = AWS_LAMBDA_ASYNC.invokeAsync(invokeRequest);
+		try {
+            InvokeResult res = future_res.get();
+            if (res.getStatusCode() == 200) {
+                System.out.println("\nLambda function returned:");
+                ByteBuffer response_payload = res.getPayload();
+                System.out.println(new String(response_payload.array()));
+            }
+            else {
+                System.out.format("Received a non-OK response from AWS: %d\n",
+                        res.getStatusCode());
+            }
+        }
+        catch (InterruptedException | ExecutionException e) {
+            System.err.println(e.getMessage());
+            System.exit(1);
+        }
+		
+	}
+
+	private static String objectToJSON(Object obj) {
+		String json = "";
+		try {
+			ObjectMapper objectMapper = new ObjectMapper();
+			//objectMapper.configure(JsonParser.Feature.ALLOW_UNQUOTED_FIELD_NAMES, true);
+			json = objectMapper.writeValueAsString(obj);
+
+		} catch (JsonGenerationException | IOException e) {
+			// logger.severe("Object to JSON failed: " + e.getLocalizedMessage());
+		}
+		return json;
+	}
+
+}
+
+
+
+
+package com.invoke.lambda;
+
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
+
+import org.apache.commons.io.IOUtils;
+
+import com.amazonaws.services.lambda.runtime.Context;
+import com.amazonaws.services.lambda.runtime.RequestStreamHandler;
+
+public class InputStreamHandlerLambda implements RequestStreamHandler {
+
+	@Override
+	public void handleRequest(InputStream inputStream, OutputStream outputStream, Context context) throws IOException {
+		/**
+		 * we don't want to execute business logic when we just want to warm up lambda
+		 **/
+		BufferedReader br = null;
+		String line = null;
+		try {
+			br = new BufferedReader(new InputStreamReader(inputStream));
+			if ((line = br.readLine()) != null) {
+				// business logic
+			} else {
+				System.out.println("Noting to read from input stream using buffered reader");
+			}
+		} catch (IOException ioe) {
+			System.out.println("Exception while reading input " + ioe);
+		} finally {
+			// close the streams using close method
+			try {
+				if (br != null) {
+					br.close();
+				}
+			} catch (IOException ioe) {
+				System.out.println("Error while closing stream: " + ioe);
+			}
+
+		}
+	}
+}
+
+
+
+
+package com.invoke.lambda;
+
+import com.amazonaws.services.lambda.runtime.Context;
+import com.amazonaws.services.lambda.runtime.RequestHandler;
+import com.amazonaws.services.lambda.runtime.events.SQSEvent;
+import com.amazonaws.services.lambda.runtime.events.SQSEvent.SQSMessage;
+
+public class ProcessSQSEvents implements RequestHandler<SQSEvent, Void> {
+	@Override
+	public Void handleRequest(SQSEvent event, Context context) {
+		/**
+		 * we don't want to execute business logic when we just want to warm up lambda
+		 **/
+		System.out.println("event records:" + event.getRecords());
+		if (event != null && event.getRecords() != null) {
+			// business logic
+			for (SQSMessage msg : event.getRecords()) {
+				System.out.println("msg:" + msg);
+			}
+		} else {
+			System.out.println("Noting to read from sqs event ");
+		}
+
+		return null;
+	}
+}
+
+
+
+
+
+
+package com.invoke.lambda;
+
+import org.json.simple.JSONObject;
+
+import com.amazonaws.services.dynamodbv2.AmazonDynamoDB;
+import com.amazonaws.services.dynamodbv2.AmazonDynamoDBClientBuilder;
+import com.amazonaws.services.dynamodbv2.model.AttributeValue;
+import com.amazonaws.services.dynamodbv2.model.AttributeValueUpdate;
+import com.amazonaws.services.dynamodbv2.model.UpdateItemRequest;
+import com.amazonaws.services.dynamodbv2.model.UpdateItemResult;
+import com.amazonaws.services.lambda.runtime.Context;
+import com.amazonaws.services.lambda.runtime.RequestHandler;
+
+public class LambdaToBeInvoked implements RequestHandler<JSONObject, String> {
+
+	static AmazonDynamoDB AMAZON_DYNAMO_DB_CLIENT;
+	static {
+		AMAZON_DYNAMO_DB_CLIENT = AmazonDynamoDBClientBuilder.standard().withRegion("us-east-1").build();
+	}
+
+	@Override
+	public String handleRequest(JSONObject request, Context arg1) {
+		/**
+		 * we don't want to execute business logic when we just want to warm up lambda
+		 **/
+		if (!request.isEmpty()) {
+			System.out.println("\n Inside Lambda function:");
+
+			// ByteBuffer response_payload = request.getPayload();
+			// System.out.println(new String(response_payload.array()));
+			long start = System.currentTimeMillis();
+			long end = System.currentTimeMillis();
+			System.out.println("Creating db time taken " + (end - start) + "ms");
+			String tableName = "EMPLOYEE_DATA_AMAN";
+			long start1 = System.currentTimeMillis();
+
+			UpdateItemRequest updateItemRequest = new UpdateItemRequest()
+					.withTableName((String) request.get("tableName"))
+					.addKeyEntry("MEMBER_UID", new AttributeValue().withS("2"))
+					.addKeyEntry("FILE_UID", new AttributeValue().withS("1"))
+					.addAttributeUpdatesEntry("COMMENT",
+							new AttributeValueUpdate().withValue(new AttributeValue().withS("tttt")))
+					.addAttributeUpdatesEntry("MEMBER_STATUS_CODE",
+							new AttributeValueUpdate().withValue(new AttributeValue().withS("rrrr")));
+
+			UpdateItemResult updateItemResult = AMAZON_DYNAMO_DB_CLIENT.updateItem(updateItemRequest);
+			long end1 = System.currentTimeMillis();
+			System.out.println("Update takes " + (end1 - start1) + "ms");
+		} else {
+			System.out.println("Noting to read from json object");
+		}
+		return "aaaaaaaaaaa";
+
+	}
+
+}
+
+
+
+
+
+
+package com.invoke.lambda;
+
+import com.amazonaws.regions.Regions;
+import com.amazonaws.services.lambda.AWSLambda;
+import com.amazonaws.services.lambda.AWSLambdaClientBuilder;
+import com.amazonaws.services.lambda.model.InvocationType;
+import com.amazonaws.services.lambda.model.InvokeRequest;
+import com.amazonaws.services.lambda.model.InvokeResult;
+
+public class WarmupLambda {
+	static AWSLambda awsLambda = AWSLambdaClientBuilder.standard().withRegion(Regions.US_EAST_1).build();
+	public static void main(String[] args) throws Exception {
+		
+		InvokeRequest invokeRequest = new InvokeRequest();
+		invokeRequest.setFunctionName("LambdaToBeInvoked");
+		//invokeRequest1.setPayload(null);
+		invokeRequest.setInvocationType(InvocationType.Event);
+		InvokeResult invoke = awsLambda.invoke(invokeRequest);
+		
+		InvokeRequest invokeRequest1 = new InvokeRequest();
+		invokeRequest1.setFunctionName("InputStreamHandlerLambda");
+		//invokeRequest1.setPayload(null);
+		invokeRequest1.setInvocationType(InvocationType.Event);
+		InvokeResult invoke1 = awsLambda.invoke(invokeRequest1);
+		
+		InvokeRequest invokeRequest2 = new InvokeRequest();
+		invokeRequest2.setFunctionName("ProcessSQSEvents");
+		//invokeRequest2.setPayload(null);
+		invokeRequest2.setInvocationType(InvocationType.Event);
+		InvokeResult invoke2 = awsLambda.invoke(invokeRequest2);
+
+	}
+}
+
+
+  
+  
+  
+  
